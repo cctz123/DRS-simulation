@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>DRS Airfoil & Drag Simulation</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0b0c10;
+      color: #eaeaea;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    #leftPanel {
+      flex: 2;
+      display: flex;
+      flex-direction: column;
+      background: radial-gradient(circle at top, #1e1f29 0, #050608 60%);
+      padding: 10px;
+      box-sizing: border-box;
+    }
+
+    #rightPanel {
+    flex: 1.3;
+    display: flex;
+    flex-direction: column;
+    padding: 12px;
+    box-sizing: border-box;
+    background: #111218;
+    border-left: 1px solid #272838;
+
+    /* NEW: let the whole right side scroll */
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+
+    h1 {
+      font-size: 20px;
+      margin: 0 0 4px 0;
+    }
+
+    h2 {
+      font-size: 16px;
+      margin: 8px 0 4px 0;
+    }
+
+    p {
+      margin: 4px 0 4px 0;
+      font-size: 13px;
+      color: #cfcfdc;
+    }
+
+    .canvas-wrapper {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    canvas {
+      background: #050608;
+      border-radius: 8px;
+    }
+
+    #flowCanvas {
+      flex: 2;
+      border: 1px solid #26273a;
+    }
+
+    #carCanvas {
+      flex: 1;
+      border: 1px solid #26273a;
+    }
+
+    .controls {
+      margin-top: 8px;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #26273a;
+      background: #161724;
+      font-size: 13px;
+    }
+
+    .control-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px;
+      gap: 6px;
+    }
+
+    .control-row label {
+      flex: 1.1;
+    }
+
+    .control-row input[type="range"] {
+      flex: 2;
+    }
+
+    .control-row span.value {
+      width: 70px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #readouts {
+      margin-top: 8px;
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px solid #26273a;
+      background: #141522;
+      font-size: 13px;
+    }
+
+    #barsCanvas {
+      width: 100%;
+      height: 140px;
+      border-radius: 6px;
+      border: 1px solid #26273a;
+      background: #050608;
+      margin-top: 6px;
+    }
+
+    .badge-row {
+      display: flex;
+      gap: 6px;
+      margin-top: 4px;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      border-radius: 10px;
+      padding: 2px 8px;
+      font-size: 11px;
+      border: 1px solid #34344a;
+      background: #191a28;
+    }
+
+    #perspectiveBox {
+      margin-top: 8px;
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px solid #26273a;
+      background: #151624;
+      font-size: 12px;
+    }
+
+    #perspectiveBox label {
+      font-size: 11px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 4px;
+    }
+
+    #perspectiveCanvas {
+      width: 100%;
+      height: 150px;
+      border-radius: 6px;
+      border: 1px solid #26273a;
+      background: #050608;
+      margin-top: 4px;
+    }
+
+    #explanation {
+    margin-top: 8px;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid #26273a;
+    background: #11111c;
+    font-size: 12px;
+    line-height: 1.35;
+
+    /* Let the container grow; rightPanel will scroll */
+    overflow-y: visible;
+    max-height: none;
+  }
+
+
+    #explanation::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    #explanation::-webkit-scrollbar-thumb {
+      background: #444;
+      border-radius: 4px;
+    }
+
+    #explanation ul {
+      padding-left: 18px;
+      margin: 4px 0;
+    }
+
+    #explanation li {
+      margin-bottom: 3px;
+    }
+
+    a {
+      color: #6fb7ff;
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <!-- LEFT: Visuals -->
+  <div id="leftPanel">
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:6px;">
+      <div>
+        <h1>DRS Airflow & Drag Simulator</h1>
+        <p style="font-size:12px;color:#aaa;">
+          Rear wing with adjustable DRS. Watch airflow, downforce, drag, and car speed difference.
+        </p>
+      </div>
+    </div>
+
+    <div class="canvas-wrapper">
+      <canvas id="flowCanvas"></canvas>
+      <canvas id="carCanvas"></canvas>
+    </div>
+  </div>
+
+  <!-- RIGHT: Controls + Math + Perspective -->
+  <div id="rightPanel">
+    <div class="controls">
+      <h2>Controls</h2>
+
+      <div class="control-row">
+        <label for="drsSlider">DRS Opening</label>
+        <input id="drsSlider" type="range" min="0" max="1" step="0.01" value="0">
+        <span class="value" id="drsValue">0%</span>
+      </div>
+
+      <div class="control-row">
+        <label for="aoaSlider">Angle of Attack</label>
+        <input id="aoaSlider" type="range" min="-5" max="15" step="0.5" value="5">
+        <span class="value" id="aoaValue">5°</span>
+      </div>
+
+      <div class="control-row">
+        <label for="speedSlider">Car Speed</label>
+        <input id="speedSlider" type="range" min="30" max="90" step="1" value="60">
+        <span class="value" id="speedValue">60 m/s</span>
+      </div>
+
+      <div class="badge-row">
+        <span class="badge">Density ρ = 1.225 kg/m³</span>
+        <span class="badge">Wing area A ≈ 1.5 m²</span>
+        <span class="badge">Rear wing (downforce)</span>
+      </div>
+    </div>
+
+    <div id="readouts">
+      <h2>Forces & Coefficients</h2>
+      <div id="numbers"></div>
+      <canvas id="barsCanvas"></canvas>
+    </div>
+
+    <div id="perspectiveBox">
+      <h2>Wing Perspective</h2>
+      <label>
+        <input type="checkbox" id="perspectiveToggle" checked>
+        Show 3D rotation (how this 2D slice fits into the real wing)
+      </label>
+      <canvas id="perspectiveCanvas"></canvas>
+    </div>
+
+    <div id="explanation">
+      <strong>What this shows (conceptually)</strong><br />
+      <ul>
+        <li><strong>Airflow dots:</strong> Each dot is a parcel of air flowing over the rear wing. With more and larger dots, you can clearly see how the “sheet” of air bends when you change AoA or open DRS.</li>
+        <li><strong>Angle of attack (AoA):</strong> Tilting the wing changes how strongly the flow is turned. A higher AoA means more downforce but also more drag.</li>
+        <li><strong>Downforce vs “lift”:</strong> The wing is upside-down compared to an airplane wing. It pushes the car <em>down</em> into the track. In the math we still call the coefficient <code>C<sub>L</sub></code> (lift), but physically it’s downforce.</li>
+        <li><strong>Perspective:</strong> In the main airflow view you are seeing a <em>side-on cross-section</em> of the rear wing. The small perspective panel shows the full 3D wing and highlights which slice you’re looking at.</li>
+      </ul>
+
+      <strong>Drag & lift equations (simplified)</strong><br />
+      We use:
+      <ul>
+        <li><code>D = ½ · ρ · C<sub>D</sub> · A · v²</code> → drag force (slows the car)</li>
+        <li><code>L = ½ · ρ · C<sub>L</sub> · A · v²</code> → downforce magnitude (pushes car into the ground)</li>
+      </ul>
+
+      <strong>What DRS actually does</strong>
+      <ul>
+        <li>DRS opens a flap on the rear wing, “leaking” some of the pressure difference between top and bottom surfaces.</li>
+        <li>Increasing DRS:
+          <ul>
+            <li>Reduces <code>C<sub>L</sub></code> (less downforce).</li>
+            <li>Reduces <code>C<sub>D</sub></code> even more (much lower drag).</li>
+          </ul>
+        </li>
+        <li>On the airflow canvas, opening DRS makes the downward bend of the dots weaker and the wake more open — you can literally see the airflow getting “freer.”</li>
+      </ul>
+
+      <strong>Cars on the straight</strong>
+      <ul>
+        <li>Car A (grey): DRS closed → higher drag → more of the engine force is wasted fighting air.</li>
+        <li>Car B (cyan): DRS open → lower drag → more of the engine force goes into acceleration.</li>
+        <li>Over the same time interval, Car B reaches a higher speed and covers more distance → this models why DRS is such a powerful overtaking tool.</li>
+      </ul>
+
+      <strong>Real vs simulation shape</strong><br />
+      A real F1 rear wing is curved, twisted, and made of multiple elements. Here we simplify it to a 2D slice with two flat elements (main plane + flap). The small 3D diagram shows how that slice sits inside a curved, spanwise wing.
+    </div>
+  </div>
+
+  <script>
+  // --- Canvas setup ---
+  const flowCanvas = document.getElementById("flowCanvas");
+  const carCanvas = document.getElementById("carCanvas");
+  const barsCanvas = document.getElementById("barsCanvas");
+  const perspectiveCanvas = document.getElementById("perspectiveCanvas");
+
+  function resizeCanvases() {
+    const flowRect = flowCanvas.getBoundingClientRect();
+    flowCanvas.width = flowRect.width;
+    flowCanvas.height = flowRect.height;
+
+    const carRect = carCanvas.getBoundingClientRect();
+    carCanvas.width = carRect.width;
+    carCanvas.height = carRect.height;
+
+    const barsRect = barsCanvas.getBoundingClientRect();
+    barsCanvas.width = barsRect.width;
+    barsCanvas.height = barsRect.height;
+
+    const perspRect = perspectiveCanvas.getBoundingClientRect();
+    perspectiveCanvas.width = perspRect.width;
+    perspectiveCanvas.height = perspRect.height;
+  }
+  window.addEventListener("resize", resizeCanvases);
+  resizeCanvases();
+
+  const flowCtx = flowCanvas.getContext("2d");
+  const carCtx = carCanvas.getContext("2d");
+  const barsCtx = barsCanvas.getContext("2d");
+  const perspCtx = perspectiveCanvas.getContext("2d");
+
+  // --- Controls ---
+  const drsSlider = document.getElementById("drsSlider");
+  const aoaSlider = document.getElementById("aoaSlider");
+  const speedSlider = document.getElementById("speedSlider");
+  const perspectiveToggle = document.getElementById("perspectiveToggle");
+
+  const drsValue = document.getElementById("drsValue");
+  const aoaValue = document.getElementById("aoaValue");
+  const speedValue = document.getElementById("speedValue");
+  const numbersDiv = document.getElementById("numbers");
+
+  // Physics constants
+  const rho = 1.225;   // air density (kg/m^3)
+  const area = 1.5;    // wing area (m^2)
+  const mass = 800;    // car mass (kg)
+  const engineForce = 9000; // constant engine thrust (N)
+
+  // Wing coefficient baseline
+  const baseCL0 = 0.9;
+  const dCLdAlpha = 0.08;   // per degree
+  const baseCD0 = 0.35;
+  const kInduced = 0.4;
+
+  // Simple particle system for airflow
+  const particles = [];
+  const maxParticles = 500; // denser airflow
+
+  function resetParticles() {
+    particles.length = 0;
+    for (let i = 0; i < maxParticles; i++) {
+      particles.push(spawnParticle());
+    }
+  }
+
+  function spawnParticle() {
+    const h = flowCanvas.height;
+    const bandCenter = h * 0.45;
+    const bandHeight = h * 0.7;
+    const y = bandCenter + (Math.random() - 0.5) * bandHeight;
+    return {
+      x: -Math.random() * flowCanvas.width,
+      y: y,
+      vy: 0,
+      life: Math.random() * 200 + 200
+    };
+  }
+
+  resetParticles();
+
+  // Car states
+  let carTime = 0;
+  let carA = { x: 0, v: 0 }; // grey, DRS closed
+  let carB = { x: 0, v: 0 }; // blue, DRS = slider
+
+  function resetCars() {
+    carTime = 0;
+    const initialSpeed = Number(speedSlider.value) || 0; // start both from slider speed
+    carA = { x: 0, v: initialSpeed };
+    carB = { x: 0, v: initialSpeed };
+  }
+  resetCars();
+
+  // Perspective animation state
+  let perspAngle = 0;              // rotation angle for 3D sketch (radians)
+  let targetAngle = Math.PI / 3;   // how far we rotate in 3D mode
+
+  // --- Aerodynamic model ---
+  function computeCoefficients(drs, alphaDeg) {
+    let CL = baseCL0 + dCLdAlpha * alphaDeg;
+
+    // DRS reduces downforce
+    const drsLiftFactor = 1 - 0.5 * drs; // 0 → full, 1 → 50% less
+    CL *= drsLiftFactor;
+
+    // Base drag + induced drag
+    let CD = baseCD0 + kInduced * CL * CL;
+
+    // DRS reduces drag significantly
+    const drsDragFactor = 1 - 0.3 * drs; // ~30% reduction at full DRS
+    CD *= drsDragFactor;
+
+    return { CL, CD };
+  }
+
+  function computeForces(CD, CL, speed) {
+    const q = 0.5 * rho * speed * speed; // dynamic pressure
+    const D = q * CD * area;
+    const L = q * CL * area;
+    return { D, L };
+  }
+
+  // --- Drawing functions ---
+  function drawWing(drs, alphaDeg) {
+    const ctx = flowCtx;
+    const w = flowCanvas.width;
+    const h = flowCanvas.height;
+
+    const cx = w * 0.45;
+    const cy = h * 0.45;
+    const chord = w * 0.20;
+    const thickness = h * 0.06;
+
+    const alpha = alphaDeg * Math.PI / 180;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(-alpha);
+
+    const mainW = chord;
+    const mainH = thickness;
+
+    ctx.beginPath();
+    ctx.roundRect(-mainW / 2, -mainH / 2, mainW, mainH, mainH / 2);
+    ctx.fillStyle = "#202638";
+    ctx.fill();
+    ctx.strokeStyle = "#6ce6ff";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    const flapW = chord * 0.35;
+    const flapH = thickness * 0.55;
+    const flapOffsetX = mainW / 2 - flapW * 0.2;
+    const flapOffsetY = mainH * 0.1;
+
+    const flapAngle = drs * (35 * Math.PI / 180);
+
+    ctx.save();
+    ctx.translate(flapOffsetX, flapOffsetY);
+    ctx.rotate(flapAngle);
+
+    ctx.beginPath();
+    ctx.roundRect(-flapW / 2, -flapH / 2, flapW, flapH, flapH / 2);
+    ctx.fillStyle = drs > 0.01 ? "#1f364b" : "#151922";
+    ctx.fill();
+    ctx.strokeStyle = drs > 0.01 ? "#00ffd9" : "#a0a0ff";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.restore();
+
+    // Simple airflow direction arrow (2D slice)
+    ctx.save();
+    ctx.translate(-mainW * 0.9, 0);
+    ctx.rotate(alpha);
+    ctx.strokeStyle = "#8bd4ff";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(-30, 0);
+    ctx.lineTo(30, 0);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(30, 0);
+    ctx.lineTo(22, -4);
+    ctx.lineTo(22, 4);
+    ctx.closePath();
+    ctx.fillStyle = "#8bd4ff";
+    ctx.fill();
+    ctx.restore();
+
+    // Labels on the 2D wing (main plane & flap)
+    ctx.save();
+    ctx.rotate(alpha); // undo rotation so labels are horizontal on screen
+    ctx.fillStyle = "#cdd2ff";
+    ctx.font = "11px system-ui";
+    ctx.fillText("Main plane (2D slice)", -mainW / 2, -mainH - 6);
+    ctx.fillText("Flap (DRS element)", mainW * 0.15, mainH + 12);
+    ctx.restore();
+
+    ctx.restore();
+  }
+
+  function updateParticles(drs, alphaDeg, speed, dt) {
+    const w = flowCanvas.width;
+    const h = flowCanvas.height;
+
+    const baseFlowSpeed = 40 + speed * 1.1;
+
+    const cx = w * 0.45;
+    const cy = h * 0.45;
+    const influenceRadius = Math.min(w, h) * 0.28;
+
+    const deflectSign = -1;
+
+    for (let p of particles) {
+      p.x += (baseFlowSpeed * dt);
+
+      const dx = p.x - cx;
+      const dy = p.y - cy;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist < influenceRadius) {
+        const strength = (1 - dist / influenceRadius);
+        const aoaFactor = 0.8 + Math.abs(alphaDeg) / 10;
+        const drsFactor = 0.4 + 1.1 * drs;
+        const vDeflect = deflectSign * strength * aoaFactor * drsFactor * 60;
+
+        p.vy += vDeflect * dt;
+      }
+
+      p.y += p.vy * dt;
+      p.vy *= 0.99;
+
+      p.life -= dt * 60;
+      if (p.x > w + 10 || p.y < -20 || p.y > h + 20 || p.life <= 0) {
+        Object.assign(p, spawnParticle());
+      }
+    }
+  }
+
+  function drawParticles() {
+    const ctx = flowCtx;
+    ctx.save();
+    ctx.globalAlpha = 0.95;
+    ctx.fillStyle = "#91e1ff";
+
+    const radius = 4.2;
+    for (let p of particles) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawFlowBackground() {
+    const ctx = flowCtx;
+    const w = flowCanvas.width;
+    const h = flowCanvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, "#05070c");
+    grad.addColorStop(1, "#050309");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.strokeStyle = "#171926";
+    ctx.lineWidth = 0.7;
+    const numLines = 12;
+    for (let i = 0; i < numLines; i++) {
+      const y = ((i + 0.5) / numLines) * h;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+      ctx.stroke();
+    }
+  }
+
+  // --- Real-time overlay explaining current settings ---
+  function drawOverlay(drs, aoaDeg, speed, CL, CD, L, D) {
+    const ctx = flowCtx;
+    const w = flowCanvas.width;
+
+    const boxWidth = Math.min(260, w * 0.46);
+    const boxHeight = 120;
+    const x = 12;
+    const y = 12;
+
+    let drsText;
+    if (drs < 0.05) {
+      drsText = "DRS closed → max downforce, high drag.";
+    } else if (drs < 0.4) {
+      drsText = "DRS slightly open → downforce ↓ a bit, drag ↓.";
+    } else if (drs < 0.8) {
+      drsText = "DRS open → downforce ↓↓, drag much lower.";
+    } else {
+      drsText = "DRS fully open → minimum drag, low downforce.";
+    }
+
+    let aoaText;
+    if (aoaDeg < 0) {
+      aoaText = "Negative AoA → wing unloads, less downforce.";
+    } else if (aoaDeg < 5) {
+      aoaText = "Low AoA → moderate downforce, relatively low drag.";
+    } else if (aoaDeg < 10) {
+      aoaText = "Medium AoA → strong downforce, drag penalty growing.";
+    } else {
+      aoaText = "High AoA → very strong downforce, big drag penalty.";
+    }
+
+    let speedText;
+    if (speed < 40) {
+      speedText = "Low speed → forces still small (∝ v²).";
+    } else if (speed < 70) {
+      speedText = "Medium speed → downforce and drag rising fast.";
+    } else {
+      speedText = "High speed → huge downforce & drag (v² scaling).";
+    }
+
+    const v_kmh = speed * 3.6;
+    const L_kN = Math.abs(L) / 1000;
+    const D_kN = D / 1000;
+
+    ctx.save();
+    ctx.globalAlpha = 0.92;
+    ctx.fillStyle = "rgba(8, 10, 20, 0.85)";
+    ctx.beginPath();
+    ctx.roundRect(x, y, boxWidth, boxHeight, 8);
+    ctx.fill();
+
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = "#e5e7ff";
+    ctx.font = "11px system-ui";
+    let lineY = y + 16;
+
+    ctx.fillText("Live explanation:", x + 10, lineY);
+    lineY += 16;
+
+    ctx.fillStyle = "#b5c0ff";
+    ctx.fillText(`• Speed ≈ ${v_kmh.toFixed(1)} km/h`, x + 10, lineY);
+    lineY += 14;
+    ctx.fillText(`  |Downforce| ≈ ${L_kN.toFixed(2)} kN, Drag ≈ ${D_kN.toFixed(2)} kN`, x + 10, lineY);
+    lineY += 16;
+
+    ctx.fillStyle = "#d4e0ff";
+    ctx.fillText("• DRS: " + drsText, x + 10, lineY);
+    lineY += 14;
+    ctx.fillText("• Angle of attack: " + aoaText, x + 10, lineY);
+    lineY += 14;
+    ctx.fillText("• Speed effect: " + speedText, x + 10, lineY);
+
+    ctx.restore();
+  }
+
+  // --- Car simulation that now matches toggles ---
+  // Car A: DRS closed (0)
+  // Car B: DRS = slider value
+  function drawCars(CD_closed, CD_open, dt) {
+    const ctx = carCtx;
+    const w = carCanvas.width;
+    const h = carCanvas.height;
+
+    function stepCar(car, CD) {
+      // drag depends on the car's own speed
+      const D = 0.5 * rho * CD * area * car.v * car.v;
+      const Fnet = engineForce - D;
+      const a = Fnet / mass;
+      car.v += a * dt;
+      if (car.v < 0) car.v = 0;
+      car.x += car.v * dt;
+    }
+
+    stepCar(carA, CD_closed);
+    stepCar(carB, CD_open);
+    carTime += dt;
+
+    const maxX = 350;
+    if (carA.x > maxX || carB.x > maxX || carTime > 15) {
+      resetCars();
+    }
+
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = "#05060b";
+    ctx.fillRect(0, 0, w, h);
+
+    const trackY = h * 0.6;
+    ctx.fillStyle = "#14151f";
+    ctx.fillRect(0, trackY - 18, w, 36);
+
+    const finishScreenX = w * 0.85;
+    ctx.fillStyle = "#f8f8f8";
+    for (let i = 0; i < 10; i++) {
+      const size = 6;
+      const x = finishScreenX + (i % 2) * size;
+      const y = trackY - 18 + Math.floor(i / 2) * size;
+      ctx.fillRect(x, y, size, size);
+    }
+
+    function worldToScreen(x) {
+      const scale = (finishScreenX - 40) / maxX;
+      return 40 + x * scale;
+    }
+
+    const carAScreenX = worldToScreen(carA.x);
+    const carBScreenX = worldToScreen(carB.x);
+
+    ctx.fillStyle = "#cccccc";
+    ctx.beginPath();
+    ctx.roundRect(carAScreenX - 18, trackY - 16, 36, 18, 4);
+    ctx.fill();
+
+    ctx.fillStyle = "#00f5ff";
+    ctx.beginPath();
+    ctx.roundRect(carBScreenX - 18, trackY + 2, 36, 18, 4);
+    ctx.fill();
+
+    ctx.font = "11px system-ui";
+    ctx.fillStyle = "#dddddd";
+    ctx.fillText("Car A: DRS 0% (more drag)", 10, 16);
+    ctx.fillStyle = "#7ef5ff";
+    ctx.fillText("Car B: DRS slider (less drag)", 10, 30);
+
+    // Show DRS speed advantage
+    const deltaV = (carB.v - carA.v) * 3.6; // km/h
+    ctx.fillStyle = "#ffdf6b";
+    ctx.fillText(
+      `DRS car is ${deltaV >= 0 ? "+" : ""}${deltaV.toFixed(1)} km/h vs non-DRS`,
+      w - 260,
+      20
+    );
+
+    ctx.fillStyle = "#999";
+    ctx.fillText("Same engine power; lower drag car pulls ahead on the straight.", 10, h - 8);
+  }
+
+  function drawBars(CD_closed, CD_open, CL_closed, CL_open) {
+    const ctx = barsCtx;
+    const w = barsCanvas.width;
+    const h = barsCanvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    ctx.fillStyle = "#05060c";
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.font = "12px system-ui";
+    ctx.fillStyle = "#d0d0ff";
+    ctx.fillText("Closed vs DRS (coefficients at slider setting)", 8, 14);
+
+    const padding = 40;
+    const graphWidth = w - 2 * padding;
+    const graphHeight = h - 40;
+
+    const maxCD = Math.max(CD_closed, CD_open, 0.1);
+    const maxCL = Math.max(CL_closed, CL_open, 0.1);
+
+    const barWidth = graphWidth / 6;
+
+    function drawBarPair(label, idx, valClosed, valOpen, maxVal) {
+      const baseX = padding + idx * (barWidth * 2.4);
+      const baselineY = h - 22;
+
+      const closedHeight = (valClosed / maxVal) * (graphHeight - 10);
+      const openHeight = (valOpen / maxVal) * (graphHeight - 10);
+
+      ctx.fillStyle = "#aaaaee";
+      ctx.fillRect(baseX, baselineY - closedHeight, barWidth, closedHeight);
+
+      ctx.fillStyle = "#00f0ff";
+      ctx.fillRect(baseX + barWidth * 1.1, baselineY - openHeight, barWidth, openHeight);
+
+      ctx.fillStyle = "#c0c0c0";
+      ctx.font = "11px system-ui";
+      ctx.fillText(label, baseX, baselineY + 12);
+    }
+
+    drawBarPair("C_D", 0, CD_closed, CD_open, maxCD);
+    drawBarPair("C_L", 1, CL_closed, CL_open, maxCL);
+
+    ctx.font = "10px system-ui";
+    ctx.fillStyle = "#aaaaee";
+    ctx.fillRect(w - 110, 18, 10, 3);
+    ctx.fillText("Closed", w - 95, 23);
+    ctx.fillStyle = "#00f0ff";
+    ctx.fillRect(w - 110, 30, 10, 3);
+    ctx.fillText("DRS (slider)", w - 95, 35);
+  }
+
+  function updateUI(CL, CD, L, D, speed, CL_closed, CD_closed, CL_open, CD_open) {
+    drsValue.textContent = (Number(drsSlider.value) * 100).toFixed(0) + "%";
+    aoaValue.textContent = Number(aoaSlider.value).toFixed(1) + "°";
+    speedValue.textContent = Number(speedSlider.value).toFixed(0) + " m/s";
+
+    const v_kmh = speed * 3.6;
+    const deltaV = (carB.v - carA.v) * 3.6;
+
+    numbersDiv.innerHTML = `
+      <div><strong>Reference speed (for force calc):</strong> ${v_kmh.toFixed(1)} km/h</div>
+      <div><strong>C<sub>L</sub> (downforce coeff):</strong> ${CL.toFixed(3)} &nbsp;&nbsp; <strong>C<sub>D</sub> (drag coeff):</strong> ${CD.toFixed(3)}</div>
+      <div><strong>|Downforce| L:</strong> ${(Math.abs(L) / 1000).toFixed(2)} kN</div>
+      <div><strong>Drag D:</strong> ${(D / 1000).toFixed(2)} kN</div>
+      <div style="margin-top:4px;font-size:11px;color:#aaa;">
+        Car A (DRS 0%): v = ${(carA.v * 3.6).toFixed(1)} km/h, distance = ${carA.x.toFixed(1)} m<br>
+        Car B (DRS slider): v = ${(carB.v * 3.6).toFixed(1)} km/h, distance = ${carB.x.toFixed(1)} m
+      </div>
+      <div style="margin-top:2px;font-size:11px;color:#ffdf6b;">
+        DRS advantage: ${deltaV >= 0 ? "+" : ""}${deltaV.toFixed(1)} km/h
+      </div>
+    `;
+
+    drawBars(CD_closed, CD_open, CL_closed, CL_open);
+  }
+
+  // --- Perspective panel drawing (2D + 3D with camera rotation) ---
+  function drawPerspectivePanel() {
+    const ctx = perspCtx;
+    const w = perspectiveCanvas.width;
+    const h = perspectiveCanvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    ctx.fillStyle = "#05060c";
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.font = "11px system-ui";
+    ctx.fillStyle = "#d0d4ff";
+    ctx.fillText("Top view (3D wing) → side slice used in airflow view", 8, 14);
+
+    const cx = w * 0.5;
+    const cy = h * 0.62;
+    const span = w * 0.55;
+    const chord = h * 0.20;
+
+    const angle = perspAngle;
+    const cosA = Math.cos(angle);
+    const sinA = Math.sin(angle);
+
+    function project(x, y, z) {
+      const xRot = x * cosA - z * sinA;
+      const zRot = x * sinA + z * cosA;
+      const screenX = cx + xRot;
+      const screenY = cy + y - zRot * 0.15;
+      return { x: screenX, y: screenY };
+    }
+
+    const halfSpan = span / 2;
+    const mainZ = 0;
+    const flapZ = chord * 0.5;
+    const thickness = chord * 0.25;
+
+    function camberY(x) {
+      const t = x / halfSpan;
+      return -Math.pow(t, 2) * (thickness * 0.4);
+    }
+
+    // main plane
+    ctx.strokeStyle = "#4ea9ff";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    for (let i = -halfSpan; i <= halfSpan; i += span / 40) {
+      const yTop = camberY(i) - thickness / 2;
+      const p = project(i, yTop, mainZ);
+      if (i === -halfSpan) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    }
+    for (let i = halfSpan; i >= -halfSpan; i -= span / 40) {
+      const yBot = camberY(i) + thickness / 2;
+      const p = project(i, yBot, mainZ);
+      ctx.lineTo(p.x, p.y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = "#1e2740";
+    ctx.fill();
+    ctx.stroke();
+
+    // flap
+    ctx.beginPath();
+    for (let i = -halfSpan * 0.6; i <= halfSpan * 0.6; i += span / 40) {
+      const yTop = camberY(i) - thickness / 3;
+      const p = project(i, yTop, flapZ);
+      if (i === -halfSpan * 0.6) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    }
+    for (let i = halfSpan * 0.6; i >= -halfSpan * 0.6; i -= span / 40) {
+      const yBot = camberY(i) + thickness / 3;
+      const p = project(i, yBot, flapZ);
+      ctx.lineTo(p.x, p.y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = "#24385a";
+    ctx.fill();
+    ctx.stroke();
+
+    // highlighted slice
+    const sliceX = 0;
+    const sliceTopMain = project(sliceX, camberY(sliceX) - thickness / 2, mainZ);
+    const sliceBotMain = project(sliceX, camberY(sliceX) + thickness / 2, mainZ);
+    const sliceTopFlap = project(sliceX, camberY(sliceX) - thickness / 3, flapZ);
+    const sliceBotFlap = project(sliceX, camberY(sliceX) + thickness / 3, flapZ);
+
+    ctx.strokeStyle = "#ffdf6b";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(sliceTopMain.x, sliceTopMain.y);
+    ctx.lineTo(sliceBotMain.x, sliceBotMain.y);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(sliceTopFlap.x, sliceTopFlap.y);
+    ctx.lineTo(sliceBotFlap.x, sliceBotFlap.y);
+    ctx.stroke();
+
+    ctx.fillStyle = "#f5e7a2";
+    ctx.font = "10px system-ui";
+    const arrowStart = { x: sliceBotMain.x + 6, y: sliceBotMain.y + 4 };
+    ctx.beginPath();
+    ctx.moveTo(arrowStart.x, arrowStart.y);
+    ctx.lineTo(arrowStart.x + 40, arrowStart.y - 5);
+    ctx.strokeStyle = "#f5e7a2";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(arrowStart.x + 40, arrowStart.y - 5);
+    ctx.lineTo(arrowStart.x + 33, arrowStart.y - 8);
+    ctx.lineTo(arrowStart.x + 34, arrowStart.y);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillText("This cross-section = view on left", arrowStart.x + 44, arrowStart.y - 2);
+
+    // inset 2D diagram
+    const sideX = 14;
+    const sideY = h - 48;
+    const sideChord = 52;
+    const sideThick = 12;
+
+    ctx.strokeStyle = "#6ce6ff";
+    ctx.lineWidth = 1;
+    ctx.fillStyle = "#1b2135";
+    ctx.beginPath();
+    ctx.roundRect(sideX, sideY, sideChord, sideThick, 4);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#223450";
+    ctx.beginPath();
+    ctx.roundRect(sideX + sideChord * 0.6, sideY + 2, sideChord * 0.35, sideThick - 4, 4);
+    ctx.fill();
+    ctx.stroke();
+
+    // airflow arrow
+    ctx.strokeStyle = "#8bd4ff";
+    ctx.beginPath();
+    ctx.moveTo(sideX - 20, sideY + sideThick / 2);
+    ctx.lineTo(sideX - 2, sideY + sideThick / 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(sideX - 2, sideY + sideThick / 2);
+    ctx.lineTo(sideX - 7, sideY + sideThick / 2 - 3);
+    ctx.lineTo(sideX - 7, sideY + sideThick / 2 + 3);
+    ctx.closePath();
+    ctx.fillStyle = "#8bd4ff";
+    ctx.fill();
+
+    ctx.fillStyle = "#cdd2ff";
+    ctx.font = "9px system-ui";
+    ctx.fillText("2D side view used in airflow sim", sideX, sideY - 4);
+    ctx.fillText("Main plane", sideX + 2, sideY + sideThick + 11);
+    ctx.fillText("Flap (DRS)", sideX + sideChord * 0.6, sideY + sideThick + 11);
+  }
+
+  let lastTime = performance.now();
+
+  function loop(now) {
+    const dt = Math.min((now - lastTime) / 1000, 0.04);
+    lastTime = now;
+
+    const drs = Number(drsSlider.value);
+    const aoaDeg = Number(aoaSlider.value);
+    const speed = Number(speedSlider.value);
+
+    // Closed vs DRS-at-slider coefficients
+    const coeffClosed = computeCoefficients(0, aoaDeg);
+    const coeffOpen = computeCoefficients(drs, aoaDeg);
+    const clClosed = coeffClosed.CL;
+    const cdClosed = coeffClosed.CD;
+    const clOpen = coeffOpen.CL;
+    const cdOpen = coeffOpen.CD;
+
+    // Forces at reference speed (for overlays / numbers)
+    const forcesClosed = computeForces(cdClosed, clClosed, speed);
+    const forcesOpen = computeForces(cdOpen, clOpen, speed);
+
+    // "Current" means: actual slider DRS state
+    const coeffCurrent = coeffOpen;
+    const forcesCurrent = forcesOpen;
+
+    updateParticles(drs, aoaDeg, speed, dt);
+    drawFlowBackground();
+    drawParticles();
+    drawWing(drs, aoaDeg);
+
+    drawOverlay(
+      drs,
+      aoaDeg,
+      speed,
+      coeffCurrent.CL,
+      coeffCurrent.CD,
+      forcesCurrent.L,
+      forcesCurrent.D
+    );
+
+    // Car sim now uses CD_closed and CD_open, tied to sliders
+    drawCars(cdClosed, cdOpen, dt);
+
+    updateUI(
+      coeffCurrent.CL,
+      coeffCurrent.CD,
+      forcesCurrent.L,
+      forcesCurrent.D,
+      speed,
+      clClosed,
+      cdClosed,
+      clOpen,
+      cdOpen
+    );
+
+    // Perspective rotation
+    if (perspectiveToggle.checked) {
+      perspAngle += dt * 0.7;
+      if (perspAngle > targetAngle) perspAngle -= targetAngle;
+    } else {
+      const relaxSpeed = 2.0;
+      perspAngle += (0.25 - perspAngle) * relaxSpeed * dt;
+    }
+    drawPerspectivePanel();
+
+    requestAnimationFrame(loop);
+  }
+
+  requestAnimationFrame(loop);
+</script>
+
+</body>
+</html>
